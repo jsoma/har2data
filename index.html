@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAR Data Extractor</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
+    <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            padding-bottom: 100px;  /* Add space at bottom */
+            background-color: #faf9f6;  /* Much lighter beige background */
+            color: #4a4a4a;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 100%;
+        }
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 0;
+            height: calc(100vh - 200px);  /* Take up available height minus header */
+            overflow: hidden;  /* Contain the sections */
+        }
+        .json-section {
+            display: flex;
+            gap: 20px;
+            height: 50%;  /* Take up half of main content */
+            min-height: 400px;
+            position: relative;
+            margin-bottom: 0;  /* Remove margin since we're using flex gap */
+        }
+        .left-side {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex: 1 1 auto;
+        }
+        .left-header {
+            background: white;
+            flex-shrink: 0; /* Add this */
+        }
+        .left-content {
+            flex: 1;
+            overflow: auto;
+            min-height: 0;  /* Important for flex scrolling */
+            position: relative; /* Add this */
+        }
+        .right-panel {
+            min-width: 200px;
+            overflow: auto;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            flex: 0 1 50%;
+        }
+        .right-panel:empty {
+            flex-basis: 0%;
+            min-width: 0;
+        }
+        .drop-zone {
+            border: 1px solid #e0d9cc;  /* Thinner, solid, subtle border */
+            padding: 100px;
+            text-align: center;
+            margin-bottom: 0;
+            font-size: 18px;
+            background: #fffefc;
+            border-radius: 8px;  /* Subtle rounding */
+            color: #998675;  /* Softer text color */
+            transition: all 0.2s ease;  /* Smooth transition for hover/active states */
+        }
+        .drop-zone.active {
+            border-color: #b5a99a;  /* Slightly darker when active */
+            background: #fdfbf7;
+            color: #7c4a1f;  /* Darker text when active */
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 600px;
+            background: #ffffff;  /* Pure white background */
+        }
+        th, td {
+            border: 1px solid #d5cec3;  /* Slightly darker border */
+            padding: 4px;
+            text-align: left;
+            color: #2d2a24;  /* Consistent text color */
+        }
+        th {
+            background-color: #e0d9cc;  /* Darker header background */
+            font-weight: 600;
+        }
+        tr:hover {
+            background-color: #f5f2eb;  /* Slightly darker hover */
+        }
+        .json-viewer {
+            flex: 1;
+            overflow: auto;
+            background: #ffffff;  /* Pure white background */
+            color: #2d2a24;
+            padding: 15px;
+            border: 1px solid #e0d9cc;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .json-line {
+            display: flex;
+            gap: 4px;
+            white-space: pre;
+        }
+        .json-toggle {
+            cursor: pointer;
+            color: #8b6b4d;  /* Warm brown for toggles */
+            user-select: none;
+        }
+        .json-toggle:hover {
+            opacity: 0.8;
+        }
+        .json-key {
+            color: #5a3511;  /* Darker brown for better contrast */
+        }
+        .json-string {
+            color: #4b5320;  /* Darker olive for strings */
+        }
+        .json-number {
+            color: #644023;  /* Darker rusty brown */
+        }
+        .json-boolean {
+            color: #6b3710;  /* Darker saddle brown */
+        }
+        .json-null {
+            color: #7d4b2f;  /* Darker muted brown */
+        }
+        .json-preview {
+            color: #998675;  /* Lighter brown for preview text */
+            font-style: italic;
+        }
+        .controls {
+            margin-bottom: 0;  /* Remove margin since we're using gap */
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+        }
+        button {
+            background: #b5a99a;  /* Beige button */
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #a39687;  /* Darker beige on hover */
+        }
+        .json-key[style*="cursor: pointer"]:hover {
+            color: #00b7ff;
+        }
+        .preview-section {
+            margin-left: 0;
+            width: 100%;
+            min-width: 0;
+            height: 50%;  /* Take up other half of main content */
+            min-height: 400px;
+            overflow: hidden;  /* Contain the content */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .preview-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;  /* Allow container to shrink */
+            overflow: hidden;  /* Contain the table wrapper */
+        }
+        .preview-table-wrapper {
+            flex: 1;
+            display: flex;
+            gap: 20px;  /* Same gutter in preview section */
+            min-height: 0;
+            overflow: auto;
+        }
+        .preview-table-container {
+            flex: 3;  /* 60% */
+            min-width: 0;
+            overflow: auto;
+        }
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+        }
+        .preview-table th,
+        .preview-table td {
+            padding: 4px 6px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .preview-table th {
+            background: #f5f5f5;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .preview-table tr:hover {
+            background: #f8f9fa;
+        }
+        .preview-info {
+            color: #666;
+            margin: 0;  /* Remove margins since we're using flex gap */
+        }
+        .preview-error {
+            color: #dc3545;
+            padding: 20px;
+            text-align: center;
+            font-weight: bold;
+            background: #fff;
+            border-radius: 4px;
+        }
+        .preview-section.error {
+            border-color: #dc3545;
+            background: #fff8f8;
+        }
+        .preview-warning {
+            color: #8b7355;  /* Warm brown */
+            background-color: #f7f4ed;
+            border: 1px solid #e0d9cc;
+            padding: 10px;
+            margin: 0;  /* Remove margins since we're using flex gap */
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .preview-table td {
+            max-height: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 300px;
+        }
+        .preview-table tr.selected {
+            background-color: #f0ece5;  /* Muted beige for selection */
+        }
+        .preview-detail {
+            flex: 2;  /* 40% */
+            min-width: 400px;  /* Increased minimum width */
+            width: 40%;  /* Explicit width */
+            max-width: none;  /* Remove max-width limit */
+            margin: 0;
+            overflow: auto;
+            background: #faf7f2;  /* Light beige */
+            border: 1px solid #e0d9cc;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        .preview-detail h3 {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #2d2a24;
+        }
+        .preview-detail-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .preview-detail-table td {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        .preview-detail-table td.header {
+            width: 200px;
+            font-weight: bold;
+            color: #666;
+        }
+        .preview-detail-table td.value {
+            word-break: break-word;
+        }
+        .preview-detail-table pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+        h1 {
+            margin-top: 1rem;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2d2a24;
+            font-size: 5rem;
+            font-weight: 800;  /* Extra-bold weight for more character */
+            letter-spacing: -0.02em;
+        }
+        .left-panel .controls {
+            position: static;
+            background: white;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .left-panel input[type="text"] {
+            width: 300px;  /* Fixed width for the input */
+            box-sizing: border-box;  /* Include padding in width */
+        }
+        input[type="text"] {
+            padding: 8px;
+            box-sizing: border-box;  /* Include padding in width */
+        }
+        button.export-button {
+            font-size: 18px;  /* Bigger text */
+            padding: 15px 40px;  /* Bigger padding */
+            background: #b5a99a;  /* Beige button */
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin: 20px 0;  /* More vertical space */
+        }
+        button.export-button:hover {
+            background: #a39687;  /* Darker beige on hover */
+            transform: translateY(-1px);  /* Slight lift effect */
+            box-shadow: 0 2px 4px rgba(139, 131, 120, 0.2);  /* Beige shadow */
+        }
+        table, .preview-table {
+            font-size: 14px;  /* Bigger text */
+        }
+        .preview-detail-table {
+            font-size: 14px;  /* Bigger text */
+        }
+        .file-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            background: #f0ece5;  /* Muted beige */
+            border: 1px solid #e0d9cc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .file-info .filename {
+            font-weight: bold;
+        }
+        .file-info .remove {
+            color: #dc3545;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .file-info .remove:hover {
+            color: #c82333;
+        }
+        .table-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: auto;
+        }
+        .drop-zone, .file-info {
+            position: static;  /* Remove sticky */
+            background: #f4f4f4;
+        }
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: white;
+        }
+        .json-section:has(.right-panel:empty) .left-side {
+            flex: 1 1 100%;
+        }
+        .table-container table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .table-container th,
+        .table-container td {
+            border: none;  /* Remove all borders */
+            padding: 4px 8px;  /* Add more horizontal padding */
+            text-align: left;
+            border-bottom: 1px solid #eee;  /* Subtle row separator */
+        }
+        .table-container th:first-child,
+        .table-container td:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            border-right: 1px solid #eee;
+        }
+        .table-container th:nth-child(2),
+        .table-container td:nth-child(2) {
+            position: sticky;
+            left: 40px;
+            z-index: 2;
+            border-right: 1px solid #eee;
+        }
+        .table-container th:nth-child(3),
+        .table-container td:nth-child(3) {
+            position: sticky;
+            left: 110px;
+            z-index: 2;
+            border-right: 1px solid #eee;
+        }
+        .table-container th:nth-child(4),
+        .table-container td:nth-child(4) {
+            position: sticky;
+            left: 180px;
+            z-index: 2;
+            border-right: 1px solid #eee;
+        }
+        .table-container th:nth-child(5),
+        .table-container td:nth-child(5) {
+            position: sticky;
+            left: 480px;
+            z-index: 2;
+            border-right: 1px solid #ddd;
+        }
+        /* Add shadow effect for sticky columns */
+        .table-container td:nth-child(4)::after,
+        .table-container th:nth-child(4)::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -5px;
+            bottom: 0;
+            width: 5px;
+            background: linear-gradient(to right, rgba(0,0,0,0.1), transparent);
+            pointer-events: none;
+        }
+        /* Ensure sticky headers stay on top */
+        .table-container th {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: #f5f5f5;
+            user-select: none;  /* Prevent text selection when clicking */
+        }
+        /* Extra z-index for corner cells */
+        .table-container th:nth-child(-n+5) {
+            z-index: 4;
+        }
+        /* Adjust column widths */
+        .table-container td:first-child,
+        .table-container th:first-child {
+            width: 40px;
+            min-width: 40px;
+        }
+        .table-container td:nth-child(2),
+        .table-container th:nth-child(2) {
+            width: 70px;
+            min-width: 70px;
+        }
+        .table-container td:nth-child(3),
+        .table-container th:nth-child(3) {
+            width: 70px;
+            min-width: 70px;
+        }
+        .table-container td:nth-child(4),
+        .table-container th:nth-child(4) {
+            width: 70px;
+            min-width: 70px;
+        }
+        .table-container td:nth-child(5),
+        .table-container th:nth-child(5) {
+            width: 70px;
+            min-width: 70px;
+        }
+        .description {
+            font-family: 'Inter', sans-serif;
+            font-weight: 400;
+            font-size: 16px;
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .size-cell {
+            padding: 2px 8px;
+            text-align: right;
+            font-weight: 500;
+            background: transparent;
+        }
+        .size-bucket-1 { background-color: #f7fcf0; }  /* Lightest */
+        .size-bucket-2 { background-color: #bae4bc; }
+        .size-bucket-3 { background-color: #7bccc4; }
+        .size-bucket-4 { background-color: #43a2ca; }
+        .size-bucket-5 { background-color: #0868ac; color: #fff; }  /* Darkest */
+        .table-container th:not(:first-child):hover {
+            background: #e8e8e8;  /* Subtle hover effect */
+        }
+        /* Ensure export button container is outside scrolling area */
+        .export-button-container {
+            flex-shrink: 0;  /* Prevent container from shrinking */
+            text-align: center;
+            padding: 20px 0;
+            background: #faf9f6;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        function ColorScaleInitializer() {
+            React.useEffect(() => {
+                // Use a ColorBrewer scheme instead of manual colors
+                const colorScale = chroma.scale('YlGnBu')
+                    .mode('lch')
+                    .colors(5);
+
+                colorScale.forEach((color, i) => {
+                    const style = document.createElement('style');
+                    style.innerHTML = `
+                        .size-bucket-${i + 1} { 
+                            background-color: ${color}; 
+                            color: ${chroma(color).luminance() < 0.5 ? '#fff' : '#000'}; 
+                        }
+                    `;
+                    document.head.appendChild(style);
+                });
+            }, []);
+
+            return null;
+        }
+
+        function JSONViewer({ data, indent = 0, maxExpandedDepth = 2, onPathClick, path = '' }) {
+            const [isCollapsed, setIsCollapsed] = React.useState(indent > maxExpandedDepth);
+            const indentStr = '  '.repeat(indent);
+            
+            const handlePathClick = (currentPath, value) => {
+                // Only allow clicking if the value is an array or object with items
+                if (typeof value === 'object' && value !== null && 
+                    (Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0)) {
+                    onPathClick?.(currentPath);
+                }
+            };
+            
+            if (data === null) return <div className="json-line"><span className="json-null">null</span></div>;
+            if (typeof data !== 'object') {
+                if (typeof data === 'string') return <div className="json-line"><span className="json-string">"{data}"</span></div>;
+                return <div className="json-line"><span className={`json-${typeof data}`}>{String(data)}</span></div>;
+            }
+
+            const isArray = Array.isArray(data);
+            const items = isArray ? data : Object.entries(data);
+            const preview = isArray 
+                ? `Array(${items.length})`
+                : `Object{${Object.keys(items).length}}`;
+
+            const currentPath = path || '';
+
+            return (
+                <div>
+                    <div className="json-line">
+                        <span 
+                            className="json-toggle" 
+                            onClick={() => setIsCollapsed(!isCollapsed)}
+                        >
+                            {isCollapsed ? '▶' : '▼'}
+                        </span>
+                        <span>
+                            {isArray ? '[' : '{'}
+                            {isCollapsed && <span className="json-preview"> {preview} </span>}
+                            {isCollapsed ? (isArray ? ']' : '}') : ''}
+                        </span>
+                    </div>
+                    {!isCollapsed && (
+                        <>
+                            {items.map((item, index) => {
+                                const [key, value] = isArray ? [index, item] : item;
+                                const newPath = currentPath 
+                                    ? `${currentPath}.${key}`
+                                    : key.toString();
+                                
+                                const isPrimitive = value === null || typeof value !== 'object';
+                                
+                                return (
+                                    <div key={key} style={{ marginLeft: 20 }}>
+                                        {isPrimitive ? (
+                                            <div className="json-line">
+                                                {!isArray && (
+                                                    <span className="json-key">"{key}": </span>
+                                                )}
+                                                {value === null ? (
+                                                    <span className="json-null">null</span>
+                                                ) : typeof value === 'string' ? (
+                                                    <span className="json-string">"{value}"</span>
+                                                ) : (
+                                                    <span className={`json-${typeof value}`}>{String(value)}</span>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {!isArray && (
+                                                    <span 
+                                                        className="json-key"
+                                                        onClick={() => handlePathClick(newPath, value)}
+                                                        style={{ 
+                                                            cursor: 'pointer',
+                                                            textDecoration: 'underline'
+                                                        }}
+                                                    >
+                                                        "{key}": 
+                                                    </span>
+                                                )}
+                                                <JSONViewer 
+                                                    data={value} 
+                                                    indent={indent + 1}
+                                                    maxExpandedDepth={maxExpandedDepth}
+                                                    onPathClick={onPathClick}
+                                                    path={newPath}
+                                                />
+                                            </>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            <div className="json-line">
+                                {indentStr}{isArray ? ']' : '}'}
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        function PreviewTable({ data }) {
+            const [selectedRow, setSelectedRow] = React.useState(null);
+            
+            if (!data?.length) return null;
+            
+            const headers = Object.keys(data[0]);
+            
+            const formatCell = (value) => {
+                if (value === null) return 'null';
+                if (typeof value === 'object') {
+                    return JSON.stringify(value);
+                }
+                return String(value);
+            };
+
+            return (
+                <div className="preview-container">
+                    <div className="preview-table-wrapper">
+                        <div className="preview-table-container">
+                            <table className="preview-table">
+                                <thead>
+                                    <tr>
+                                        {headers.map(header => (
+                                            <th key={header}>{header}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.slice(0, 100).map((row, i) => (
+                                        <tr 
+                                            key={i}
+                                            onClick={() => setSelectedRow(row)}
+                                            className={selectedRow === row ? 'selected' : ''}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            {headers.map(header => (
+                                                <td key={header} title={formatCell(row[header])}>
+                                                    {formatCell(row[header])}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {selectedRow && (
+                            <div className="preview-detail">
+                                <h3>Selected Row Details</h3>
+                                <table className="preview-detail-table">
+                                    <tbody>
+                                        {headers.map(header => (
+                                            <tr key={header}>
+                                                <td className="header">{header}</td>
+                                                <td className="value">
+                                                    {typeof selectedRow[header] === 'object' 
+                                                        ? <pre>{JSON.stringify(selectedRow[header], null, 2)}</pre>
+                                                        : String(selectedRow[header])
+                                                    }
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function normalizeJSON(data, prefix = '') {
+            if (!data || typeof data !== 'object') {
+                return { [prefix]: data };
+            }
+
+            let result = {};
+            
+            for (const [key, value] of Object.entries(data)) {
+                const newKey = prefix ? `${prefix}.${key}` : key;
+                
+                if (Array.isArray(value)) {
+                    // Keep arrays as-is
+                    result[newKey] = value;
+                } else if (value && typeof value === 'object') {
+                    // Only flatten objects
+                    const normalized = normalizeJSON(value, newKey);
+                    result = { ...result, ...normalized };
+                } else {
+                    result[newKey] = value;
+                }
+            }
+            
+            return result;
+        }
+
+        function getSizeBucket(size, breaks) {
+            for (let i = 0; i < breaks.length; i++) {
+                if (size <= breaks[i]) return i + 1;
+            }
+            return breaks.length + 1;
+        }
+
+        function App() {
+            const [entries, setEntries] = React.useState([]);
+            const [selectedEntry, setSelectedEntry] = React.useState(null);
+            const [filterRegex, setFilterRegex] = React.useState('');
+            const [jsonPath, setJsonPath] = React.useState('');
+            const [selectedRows, setSelectedRows] = React.useState(new Set());
+            const [lastSelectedIndex, setLastSelectedIndex] = React.useState(null);
+            const [previewData, setPreviewData] = React.useState(null);
+            const [selectedPreviewRow, setSelectedPreviewRow] = React.useState(null);
+            const [previewError, setPreviewError] = React.useState(null);
+            const [filename, setFilename] = React.useState(null);
+            const [sortColumn, setSortColumn] = React.useState(null);
+            const [sortDirection, setSortDirection] = React.useState('asc');
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    setFilename(file.name);
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const har = JSON.parse(e.target.result);
+                            const jsonEntries = har.log.entries.filter(entry => 
+                                entry.response.content.mimeType.includes('application/json')
+                            ).map((entry, index) => ({
+                                ...entry,
+                                _id: index,  // Add unique ID when importing
+                                response: entry.response.content.encoding === 'base64' 
+                                    ? {
+                                        ...entry.response,
+                                        content: {
+                                            ...entry.response.content,
+                                            text: atob(entry.response.content.text)
+                                        }
+                                    }
+                                    : entry.response
+                            }));
+                            setEntries(jsonEntries);
+                        } catch (error) {
+                            console.error(error);
+                            alert('Error parsing HAR file');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add('active');
+            };
+
+            const handleDragLeave = (e) => {
+                e.currentTarget.classList.remove('active');
+            };
+
+            const filteredEntries = entries.filter(entry => {
+                if (!filterRegex) return true;
+                try {
+                    const regex = new RegExp(filterRegex, 'i');
+                    return regex.test(entry.request.url);
+                } catch (error) {
+                    return true;
+                }
+            });
+
+            const sortedEntries = React.useMemo(() => {
+                if (!sortColumn) return filteredEntries;
+
+                return [...filteredEntries].sort((a, b) => {
+                    let aValue, bValue;
+                    
+                    switch (sortColumn) {
+                        case 'method':
+                            aValue = a.request.method;
+                            bValue = b.request.method;
+                            break;
+                        case 'size':
+                            aValue = a.response.content.size;
+                            bValue = b.response.content.size;
+                            break;
+                        case 'url':
+                            aValue = a.request.url;
+                            bValue = b.request.url;
+                            break;
+                        case 'status':
+                            aValue = a.response.status;
+                            bValue = b.response.status;
+                            break;
+                        default:
+                            return 0;
+                    }
+
+                    const comparison = aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+                    return sortDirection === 'asc' ? comparison : -comparison;
+                });
+            }, [filteredEntries, sortColumn, sortDirection]);
+
+            const sizeBreaks = React.useMemo(() => {
+                if (!entries.length) return [];
+                const sizes = entries.map(entry => entry.response.content.size / 1024);
+                return ss.jenks(sizes, 4); // 5 buckets (4 breaks)
+            }, [entries]);
+
+            const handleSort = (column) => {
+                if (sortColumn === column) {
+                    setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortColumn(column);
+                    setSortDirection('asc');
+                }
+            };
+
+            const handleRowClick = (entry, event) => {
+                setSelectedEntry(entry);
+                handleRowSelection(entry, event);
+                
+                // Toggle checkbox when clicking the row
+                const newSelected = new Set(selectedRows);
+                const entryId = getEntryId(entry);
+                if (newSelected.has(entryId)) {
+                    newSelected.delete(entryId);
+                } else {
+                    newSelected.add(entryId);
+                }
+                setSelectedRows(newSelected);
+            };
+
+            const handleRowSelection = (entry, event) => {
+                const newSelected = new Set(selectedRows);
+                const entryId = getEntryId(entry);
+                
+                if (event.shiftKey && lastSelectedIndex !== null) {
+                    // Find the indices in the current sorted list
+                    const currentIndex = sortedEntries.findIndex(e => getEntryId(e) === entryId);
+                    const lastIndex = sortedEntries.findIndex(e => getEntryId(e) === lastSelectedIndex);
+                    const start = Math.min(lastIndex, currentIndex);
+                    const end = Math.max(lastIndex, currentIndex);
+                    
+                    // Select all entries between
+                    for (let i = start; i <= end; i++) {
+                        newSelected.add(getEntryId(sortedEntries[i]));
+                    }
+                } else if (event.ctrlKey || event.metaKey) {
+                    if (newSelected.has(entryId)) {
+                        newSelected.delete(entryId);
+                    } else {
+                        newSelected.add(entryId);
+                    }
+                } else {
+                    newSelected.clear();
+                    newSelected.add(entryId);
+                }
+                
+                setSelectedRows(newSelected);
+                setLastSelectedIndex(entryId);
+            };
+
+            const toggleSelectAll = () => {
+                if (selectedRows.size === sortedEntries.length) {
+                    setSelectedRows(new Set());
+                } else {
+                    setSelectedRows(new Set(sortedEntries.map(getEntryId)));
+                }
+            };
+
+            const prepareExportData = () => {
+                if (selectedRows.size === 0) {
+                    alert('Please select at least one row');
+                    return null;
+                }
+
+                const selectedEntries = filteredEntries.filter(entry => selectedRows.has(getEntryId(entry)));
+                let exportData = selectedEntries.map(entry => {
+                    const response = JSON.parse(entry.response.content.text);
+                    if (jsonPath) {
+                        try {
+                            const path = jsonPath.split('.');
+                            let result = response;
+                            for (const key of path) {
+                                result = result[key];
+                            }
+                            return result;
+                        } catch {
+                            return response;
+                        }
+                    }
+                    return response;
+                });
+
+                // Flatten if array of arrays
+                if (Array.isArray(exportData[0])) {
+                    exportData = exportData.flat();
+                }
+
+                // Normalize each row
+                return exportData.map(row => normalizeJSON(row));
+            };
+
+            const handleRemove = () => {
+                setFilename(null);
+                setEntries([]);
+                setSelectedEntry(null);
+                setSelectedRows(new Set());
+                setPreviewData(null);
+                setJsonPath('');
+            };
+
+            // Create a unique ID for each entry
+            const getEntryId = (entry) => entry._id;
+
+            React.useEffect(() => {
+                const preparePreviewData = () => {
+                    if (!selectedRows.size) {
+                        setPreviewData(null);
+                        setPreviewError(null);
+                        return;
+                    }
+
+                    try {
+                        const selectedEntries = filteredEntries.filter(entry => selectedRows.has(getEntryId(entry)));
+                        let successfulData = [];
+                        let failedCount = 0;
+
+                        selectedEntries.forEach(entry => {
+                            try {
+                                const response = JSON.parse(entry.response.content.text);
+                                if (jsonPath) {
+                                    const path = jsonPath.split('.');
+                                    let result = response;
+                                    for (const key of path) {
+                                        result = result[key];
+                                    }
+                                    if (Array.isArray(result)) {
+                                        successfulData.push(...result);
+                                    } else {
+                                        successfulData.push(result);
+                                    }
+                                } else {
+                                    successfulData.push(response);
+                                }
+                            } catch {
+                                failedCount++;
+                            }
+                        });
+
+                        if (successfulData.length === 0) {
+                            setPreviewData(null);
+                            setPreviewError("No data found at specified path");
+                            return;
+                        }
+
+                        if (!Array.isArray(successfulData)) {
+                            setPreviewData(null);
+                            setPreviewError("Result must be an array");
+                            return;
+                        }
+
+                        const normalizedData = successfulData.map(row => normalizeJSON(row));
+                        setPreviewData({
+                            data: normalizedData,
+                            failedCount
+                        });
+                        setPreviewError(null);
+                    } catch (error) {
+                        setPreviewData(null);
+                        setPreviewError("Invalid JSON path");
+                    }
+                };
+
+                // Debounce the preview data preparation
+                const timeoutId = setTimeout(preparePreviewData, 100);
+                return () => clearTimeout(timeoutId);
+            }, [jsonPath, selectedRows, filteredEntries]);
+
+            const exportSelected = () => {
+                const exportData = prepareExportData();
+                if (!exportData) return;
+
+                const headers = Object.keys(exportData[0]);
+                const csv = [
+                    headers.join(','),
+                    ...exportData.map(row => 
+                        headers.map(header => JSON.stringify(row[header])).join(',')
+                    )
+                ].join('\n');
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'export.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div>
+                    <ColorScaleInitializer />
+                    <h1>HAR Data Extractor</h1>
+                    <div className="description">
+                        Transform JSON API responses from HAR files into CSV format
+                    </div>
+                    <div className="container">
+                        {!filename ? (
+                            <div 
+                                className="drop-zone"
+                                onDrop={handleDrop}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                            >
+                                Drag and drop HAR file here
+                            </div>
+                        ) : (
+                            <div className="main-content">
+                                <div className="json-section">
+                                    <div className="left-side">
+                                        <div className="left-header">
+                                            <div className="file-info">
+                                                <span className="filename">{filename}</span>
+                                                <span className="remove" onClick={handleRemove}>remove</span>
+                                            </div>
+                                            <div className="controls">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Filter URLs (regex)"
+                                                    value={filterRegex}
+                                                    onChange={(e) => setFilterRegex(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="left-content">
+                                            <div className="table-container">
+                                                <table>
+                                                    <thead>
+                                                        <tr>
+                                                            <th>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedRows.size === filteredEntries.length}
+                                                                    onChange={toggleSelectAll}
+                                                                />
+                                                            </th>
+                                                            <th 
+                                                                onClick={() => handleSort('method')}
+                                                                style={{ cursor: 'pointer' }}
+                                                            >
+                                                                Method {sortColumn === 'method' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                                            </th>
+                                                            <th 
+                                                                onClick={() => handleSort('size')}
+                                                                style={{ cursor: 'pointer' }}
+                                                            >
+                                                                Size {sortColumn === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                                            </th>
+                                                            <th 
+                                                                onClick={() => handleSort('url')}
+                                                                style={{ cursor: 'pointer' }}
+                                                            >
+                                                                URL {sortColumn === 'url' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                                            </th>
+                                                            <th 
+                                                                onClick={() => handleSort('status')}
+                                                                style={{ cursor: 'pointer' }}
+                                                            >
+                                                                Status {sortColumn === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {sortedEntries.map(entry => (
+                                                            <tr 
+                                                                key={getEntryId(entry)}
+                                                                onClick={(e) => handleRowClick(entry, e)}
+                                                                style={{
+                                                                    cursor: 'pointer',
+                                                                    backgroundColor: selectedRows.has(getEntryId(entry)) ? '#e3f2fd' : undefined
+                                                                }}
+                                                            >
+                                                                <td onClick={(e) => e.stopPropagation()}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedRows.has(getEntryId(entry))}
+                                                                        onChange={(e) => handleRowSelection(entry, e)}
+                                                                    />
+                                                                </td>
+                                                                <td>{entry.request.method}</td>
+                                                                <td className={`size-cell size-bucket-${getSizeBucket(entry.response.content.size / 1024, sizeBreaks)}`}>
+                                                                    {(entry.response.content.size / 1024).toFixed(1)}kb
+                                                                </td>
+                                                                <td>{entry.request.url}</td>
+                                                                <td>{entry.response.status}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="right-panel">
+                                        {selectedEntry && (
+                                            <>
+                                                <div className="json-viewer">
+                                                    <JSONViewer 
+                                                        data={JSON.parse(selectedEntry.response.content.text)} 
+                                                        maxExpandedDepth={1}
+                                                        onPathClick={setJsonPath}
+                                                    />
+                                                </div>
+                                                <div className="controls" style={{ marginTop: '20px' }}>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="JSON path (e.g., data.items)"
+                                                        value={jsonPath}
+                                                        onChange={(e) => setJsonPath(e.target.value)}
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                {previewData && (
+                                    <div className="preview-section">
+                                        <div className="preview-info">
+                                            Showing {Math.min(previewData.data.length, 100)} of {previewData.data.length} rows
+                                        </div>
+                                        {previewData.failedCount > 0 && (
+                                            <div className="preview-warning">
+                                                Note: {previewData.failedCount} selected item{previewData.failedCount > 1 ? 's' : ''} did 
+                                                not contain data at the specified path and {previewData.failedCount > 1 ? 'were' : 'was'} skipped.
+                                            </div>
+                                        )}
+                                        <PreviewTable data={previewData.data} />
+                                        <div className="export-button-container">
+                                            <button className="export-button" onClick={exportSelected}>
+                                                Export {previewData.data.length} rows to CSV
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html> 
