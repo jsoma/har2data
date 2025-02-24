@@ -9,6 +9,7 @@
     <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
     <script src="https://unpkg.com/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsonpath/1.1.1/jsonpath.min.js" integrity="sha512-fdudyA6TY0Kv3vTiHyZj6wkhDbmZFCflZmxtiC/lR5xRNQJaF7ODChpx0ajIIeFBBtaucDolRB1qG0r/U7eYSg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
@@ -24,20 +25,24 @@
             padding-bottom: 100px;  /* Add space at bottom */
             background-color: #faf9f6;  /* Much lighter beige background */
             color: #4a4a4a;
+            min-height: 100vh;  /* Add this */
+            display: flex;  /* Add this */
+            flex-direction: column;  /* Add this */
         }
         .container {
             display: flex;
             flex-direction: column;
             gap: 20px;
             max-width: 100%;
+            min-height: 0;  /* Add this */
         }
         .main-content {
             display: flex;
             flex-direction: column;
             gap: 20px;
             min-width: 0;
-            height: calc(100vh - 200px);  /* Take up available height minus header */
-            overflow: hidden;  /* Contain the sections */
+            flex: 1;  /* Change from fixed height to flex: 1 */
+            /*overflow: hidden;*/
         }
         .json-section {
             display: flex;
@@ -179,24 +184,25 @@
             margin-left: 0;
             width: 100%;
             min-width: 0;
-            height: 50%;  /* Take up other half of main content */
-            min-height: 400px;
-            overflow: hidden;  /* Contain the content */
+            flex: 1;  /* Change from height: 50% to flex: 1 */
+            min-height: 0;  /* Add this */
             display: flex;
             flex-direction: column;
             gap: 20px;
+            position: relative;  /* Add this */
+            overflow: visible;  /* Change from auto to visible to show export button */
         }
         .preview-container {
             flex: 1;
+            min-height: 0;
             display: flex;
             flex-direction: column;
-            min-height: 0;  /* Allow container to shrink */
-            overflow: hidden;  /* Contain the table wrapper */
+            overflow: hidden;  /* Add this */
         }
         .preview-table-wrapper {
             flex: 1;
             display: flex;
-            gap: 20px;  /* Same gutter in preview section */
+            gap: 20px;
             min-height: 0;
             overflow: auto;
         }
@@ -512,10 +518,13 @@
         }
         /* Ensure export button container is outside scrolling area */
         .export-button-container {
-            flex-shrink: 0;  /* Prevent container from shrinking */
-            text-align: center;
             padding: 20px 0;
+            text-align: center;
             background: #faf9f6;
+            position: relative;  /* Change from sticky to relative */
+            z-index: 5;
+            margin-top: auto;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
         }
         /* Add footer styles */
         .footer {
@@ -523,6 +532,9 @@
             padding: 20px;
             color: #998675;
             font-size: 14px;
+            margin-top: auto;  /* Add this */
+            position: relative;  /* Add this */
+            z-index: 1;  /* Add this */
         }
         .footer a {
             color: #7c4a1f;
@@ -530,6 +542,66 @@
         }
         .footer a:hover {
             text-decoration: underline;
+        }
+        #root {
+            flex: 1;  /* Add this */
+            display: flex;  /* Add this */
+            flex-direction: column;  /* Add this */
+            min-height: 0;  /* Add this */
+        }
+        /* Add new styles for JSONPath suggestions */
+        .jsonpath-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e0d9cc;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .jsonpath-suggestion {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .jsonpath-suggestion:hover {
+            background: #f5f2eb;
+        }
+        .jsonpath-suggestion .preview {
+            color: #998675;
+            font-size: 0.9em;
+            margin-top: 4px;
+        }
+        .controls {
+            position: relative;  /* Add this for suggestions positioning */
+        }
+        .warning-header {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .failed-entries-list {
+            margin-top: 10px;
+            margin-left: 20px;
+            font-size: 13px;
+        }
+        .failed-entry {
+            padding: 4px 0;
+            color: #666;
+        }
+        .failed-reason {
+            margin-left: 8px;
+            color: #998675;
+            font-style: italic;
+        }
+        .warning-header {
+            display: flex;
+            align-items: flex-start;
         }
     </style>
 </head>
@@ -566,7 +638,7 @@
                 // Only allow clicking if the value is an array or object with items
                 if (typeof value === 'object' && value !== null && 
                     (Array.isArray(value) ? value.length > 0 : Object.keys(value).length > 0)) {
-                    onPathClick?.(currentPath);
+                    onPathClick?.(currentPath, value);  // Pass both path and value
                 }
             };
             
@@ -774,6 +846,7 @@
             const [filename, setFilename] = React.useState(null);
             const [sortColumn, setSortColumn] = React.useState(null);
             const [sortDirection, setSortDirection] = React.useState('asc');
+            const [showFailedEntries, setShowFailedEntries] = React.useState(false);
 
             const handleDrop = (e) => {
                 e.preventDefault();
@@ -877,20 +950,14 @@
 
             const handleRowClick = (entry, event) => {
                 setSelectedEntry(entry);
-                handleRowSelection(entry, event);
-                
-                // Toggle checkbox when clicking the row
-                const newSelected = new Set(selectedRows);
-                const entryId = getEntryId(entry);
-                if (newSelected.has(entryId)) {
-                    newSelected.delete(entryId);
-                } else {
-                    newSelected.add(entryId);
-                }
-                setSelectedRows(newSelected);
             };
 
             const handleRowSelection = (entry, event) => {
+                // Don't allow selection of empty responses
+                if (!entry.response.content.text) {
+                    return;
+                }
+                
                 const newSelected = new Set(selectedRows);
                 const entryId = getEntryId(entry);
                 
@@ -912,8 +979,11 @@
                         newSelected.add(entryId);
                     }
                 } else {
-                    newSelected.clear();
-                    newSelected.add(entryId);
+                    if (newSelected.has(entryId)) {
+                        newSelected.delete(entryId);
+                    } else {
+                        newSelected.add(entryId);
+                    }
                 }
                 
                 setSelectedRows(newSelected);
@@ -924,7 +994,137 @@
                 if (selectedRows.size === sortedEntries.length) {
                     setSelectedRows(new Set());
                 } else {
-                    setSelectedRows(new Set(sortedEntries.map(getEntryId)));
+                    // Only select entries with content
+                    setSelectedRows(new Set(
+                        sortedEntries
+                            .filter(entry => entry.response.content.text)
+                            .map(getEntryId)
+                    ));
+                }
+            };
+
+            const handlePathClick = (currentPath, value) => {
+                // Convert dot notation to JSONPath with proper array handling
+                const pathParts = currentPath.split('.');
+                let jsonPath = '$';
+                
+                pathParts.forEach(part => {
+                    // Check if the part is a numeric index
+                    if (/^\d+$/.test(part)) {
+                        // If it's an array index and the value is an array item,
+                        // we want to select all items in the array instead
+                        if (Array.isArray(value)) {
+                            jsonPath += '[*]';
+                        } else {
+                            jsonPath += `[${part}]`;
+                        }
+                    } else {
+                        // For object properties
+                        jsonPath += `.${part}`;
+                    }
+                });
+
+                // If the final value is an array, append [*] to get all items
+                if (Array.isArray(value)) {
+                    jsonPath += '[*]';
+                }
+
+                setJsonPath(jsonPath);
+            };
+
+            // Add these helper functions
+            const tryJSONPath = (obj, path) => {
+                try {
+                    const result = jsonpath.query(obj, path);
+                    return result;
+                } catch (e) {
+                    console.error('JSONPath error:', e);
+                    return null;
+                }
+            };
+
+            const getPreviewForPath = (data, path) => {
+                try {
+                    const result = jsonpath.query(data, path);
+                    if (Array.isArray(result)) {
+                        return `Array(${result.length})`;
+                    } else if (typeof result === 'object' && result !== null) {
+                        return `Object{${Object.keys(result).length}}`;
+                    }
+                    return String(result);
+                } catch (e) {
+                    return 'Invalid path';
+                }
+            };
+
+            const preparePreviewData = () => {
+                if (!selectedRows.size) {
+                    setPreviewData(null);
+                    setPreviewError(null);
+                    return;
+                }
+
+                try {
+                    const selectedEntries = filteredEntries.filter(entry => selectedRows.has(getEntryId(entry)));
+                    let successfulData = [];
+                    let failedEntries = [];
+
+                    selectedEntries.forEach(entry => {
+                        // Skip entries with no response text
+                        if (!entry.response.content.text) {
+                            failedEntries.push({
+                                url: entry.request.url,
+                                reason: 'Empty response'
+                            });
+                            return;
+                        }
+                        
+                        try {
+                            const response = JSON.parse(entry.response.content.text);
+                            if (jsonPath) {
+                                const result = tryJSONPath(response, jsonPath);
+                                if (result !== null) {
+                                    if (Array.isArray(result) && result.length > 0) {
+                                        successfulData.push(...result);
+                                    } else {
+                                        successfulData.push(Array.isArray(result) ? result[0] : result);
+                                    }
+                                } else {
+                                    failedEntries.push({
+                                        url: entry.request.url,
+                                        reason: 'No data at specified path'
+                                    });
+                                }
+                            } else {
+                                successfulData.push(response);
+                            }
+                        } catch (e) {
+                            console.error('Entry processing error:', e);
+                            console.log('Entry:', entry.response);
+                            console.log('Entry:', entry.response.content);
+                            failedEntries.push({
+                                url: entry.request.url,
+                                reason: 'JSON parsing error'
+                            });
+                        }
+                    });
+
+                    if (successfulData.length === 0) {
+                        setPreviewData(null);
+                        setPreviewError("No data found at specified path");
+                        return;
+                    }
+
+                    const normalizedData = successfulData.map(row => normalizeJSON(row));
+                    setPreviewData({
+                        data: normalizedData,
+                        failedEntries
+                    });
+                    setPreviewError(null);
+                } catch (error) {
+                    console.error('Preview data error:', error);
+                    setPreviewData(null);
+                    setPreviewError("Invalid JSONPath expression");
                 }
             };
 
@@ -939,11 +1139,7 @@
                     const response = JSON.parse(entry.response.content.text);
                     if (jsonPath) {
                         try {
-                            const path = jsonPath.split('.');
-                            let result = response;
-                            for (const key of path) {
-                                result = result[key];
-                            }
+                            const result = tryJSONPath(response, jsonPath);
                             return result;
                         } catch {
                             return response;
@@ -961,6 +1157,19 @@
                 return exportData.map(row => normalizeJSON(row));
             };
 
+            // Add common JSONPath suggestions
+            const COMMON_PATHS = [
+                '$.data',
+                '$.data.*',
+                '$.items',
+                '$.items.*',
+                '$.results',
+                '$.results.*',
+                '$.response',
+                '$.response.*'
+            ];
+
+            // Add back the handleRemove function
             const handleRemove = () => {
                 setFilename(null);
                 setEntries([]);
@@ -974,64 +1183,6 @@
             const getEntryId = (entry) => entry._id;
 
             React.useEffect(() => {
-                const preparePreviewData = () => {
-                    if (!selectedRows.size) {
-                        setPreviewData(null);
-                        setPreviewError(null);
-                        return;
-                    }
-
-                    try {
-                        const selectedEntries = filteredEntries.filter(entry => selectedRows.has(getEntryId(entry)));
-                        let successfulData = [];
-                        let failedCount = 0;
-
-                        selectedEntries.forEach(entry => {
-                            try {
-                                const response = JSON.parse(entry.response.content.text);
-                                if (jsonPath) {
-                                    const path = jsonPath.split('.');
-                                    let result = response;
-                                    for (const key of path) {
-                                        result = result[key];
-                                    }
-                                    if (Array.isArray(result)) {
-                                        successfulData.push(...result);
-                                    } else {
-                                        successfulData.push(result);
-                                    }
-                                } else {
-                                    successfulData.push(response);
-                                }
-                            } catch {
-                                failedCount++;
-                            }
-                        });
-
-                        if (successfulData.length === 0) {
-                            setPreviewData(null);
-                            setPreviewError("No data found at specified path");
-                            return;
-                        }
-
-                        if (!Array.isArray(successfulData)) {
-                            setPreviewData(null);
-                            setPreviewError("Result must be an array");
-                            return;
-                        }
-
-                        const normalizedData = successfulData.map(row => normalizeJSON(row));
-                        setPreviewData({
-                            data: normalizedData,
-                            failedCount
-                        });
-                        setPreviewError(null);
-                    } catch (error) {
-                        setPreviewData(null);
-                        setPreviewError("Invalid JSON path");
-                    }
-                };
-
                 // Debounce the preview data preparation
                 const timeoutId = setTimeout(preparePreviewData, 100);
                 return () => clearTimeout(timeoutId);
@@ -1138,19 +1289,23 @@
                                                                 onClick={(e) => handleRowClick(entry, e)}
                                                                 style={{
                                                                     cursor: 'pointer',
-                                                                    backgroundColor: selectedRows.has(getEntryId(entry)) ? '#e3f2fd' : undefined
+                                                                    backgroundColor: selectedRows.has(getEntryId(entry)) ? '#e3f2fd' : undefined,
+                                                                    opacity: entry.response.content.text ? 1 : 0.5
                                                                 }}
                                                             >
                                                                 <td onClick={(e) => e.stopPropagation()}>
                                                                     <input
                                                                         type="checkbox"
                                                                         checked={selectedRows.has(getEntryId(entry))}
+                                                                        disabled={!entry.response.content.text}
                                                                         onChange={(e) => handleRowSelection(entry, e)}
                                                                     />
                                                                 </td>
                                                                 <td>{entry.request.method}</td>
                                                                 <td className={`size-cell size-bucket-${getSizeBucket(entry.response.content.size / 1024, sizeBreaks)}`}>
-                                                                    {(entry.response.content.size / 1024).toFixed(1)}kb
+                                                                    {entry.response.content.text ? 
+                                                                        `${(entry.response.content.size / 1024).toFixed(1)}kb` : 
+                                                                        `${(entry.response.content.size / 1024).toFixed(1)}kb (empty)`}
                                                                 </td>
                                                                 <td>{entry.request.url}</td>
                                                                 <td>{entry.response.status}</td>
@@ -1165,16 +1320,30 @@
                                         {selectedEntry && (
                                             <>
                                                 <div className="json-viewer">
-                                                    <JSONViewer 
-                                                        data={JSON.parse(selectedEntry.response.content.text)} 
-                                                        maxExpandedDepth={1}
-                                                        onPathClick={setJsonPath}
-                                                    />
+                                                    {(() => {
+                                                        try {
+                                                            const jsonData = selectedEntry.response.content.text ? 
+                                                                JSON.parse(selectedEntry.response.content.text) : 
+                                                                null;
+                                                            return (
+                                                                <JSONViewer 
+                                                                    data={jsonData}
+                                                                    maxExpandedDepth={1}
+                                                                    onPathClick={handlePathClick}
+                                                                />
+                                                            );
+                                                        } catch (error) {
+                                                            console.error('Error parsing JSON:', error);
+                                                            console.log('Selected entry:', selectedEntry);
+                                                            console.log('Response content:', selectedEntry.response.content);
+                                                            return <div>Error parsing JSON response</div>;
+                                                        }
+                                                    })()}
                                                 </div>
                                                 <div className="controls" style={{ marginTop: '20px' }}>
                                                     <input
                                                         type="text"
-                                                        placeholder="JSON path (e.g., data.items)"
+                                                        placeholder="JSONPath (e.g., $.data.items)"
                                                         value={jsonPath}
                                                         onChange={(e) => setJsonPath(e.target.value)}
                                                     />
@@ -1188,10 +1357,30 @@
                                         <div className="preview-info">
                                             Showing {Math.min(previewData.data.length, 100)} of {previewData.data.length} rows
                                         </div>
-                                        {previewData.failedCount > 0 && (
+                                        {previewData.failedEntries.length > 0 && (
                                             <div className="preview-warning">
-                                                Note: {previewData.failedCount} selected item{previewData.failedCount > 1 ? 's' : ''} did 
-                                                not contain data at the specified path and {previewData.failedCount > 1 ? 'were' : 'was'} skipped.
+                                                <div className="warning-header" 
+                                                     onClick={() => setShowFailedEntries(!showFailedEntries)}
+                                                     style={{ cursor: 'pointer' }}
+                                                >
+                                                    <span style={{ display: 'inline-block', width: '20px' }}>
+                                                        {showFailedEntries ? '▼' : '▶'}
+                                                    </span>
+                                                    Note: {previewData.failedEntries.length} selected item
+                                                    {previewData.failedEntries.length > 1 ? 's' : ''} did 
+                                                    not contain data at the specified path and 
+                                                    {previewData.failedEntries.length > 1 ? 'were' : 'was'} skipped.
+                                                </div>
+                                                {showFailedEntries && (
+                                                    <div className="failed-entries-list">
+                                                        {previewData.failedEntries.map((entry, index) => (
+                                                            <div key={index} className="failed-entry">
+                                                                <span className="failed-url">{entry.url}</span>
+                                                                <span className="failed-reason">({entry.reason})</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                         <PreviewTable data={previewData.data} />
